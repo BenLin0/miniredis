@@ -24,6 +24,7 @@ class ProtocolHandler(object):
             b'+': self.handle_simple_string,
             b'-': self.handle_error,
             b':': self.handle_integer,
+            b'?': self.handle_float,
             b'$': self.handle_string,
             b'*': self.handle_array,
             b'%': self.handle_dict}
@@ -48,6 +49,9 @@ class ProtocolHandler(object):
     def handle_integer(self, socket_file):
         return int(socket_file.readline())
 
+    def handle_float(self, socket_file):
+        return float(socket_file.readline())
+
     def handle_string(self, socket_file):
         # First read the length ($<length>\r\n).
         length = int(socket_file.readline())
@@ -64,7 +68,7 @@ class ProtocolHandler(object):
     
     def handle_dict(self, socket_file):
         received = socket_file.readline()
-        logger.info(f"handle_dict received {received} . expecting an integer")
+
         num_items = int(received)
         elements = [self.handle_request(socket_file)
                     for _ in range(num_items * 2)]
@@ -75,7 +79,7 @@ class ProtocolHandler(object):
         self._write(buf, data)
         buf.seek(0)
         tosend = buf.getvalue()
-        logger.info(tosend)
+        logger.debug(tosend)
         socket_file.write(tosend.encode("utf-8"))
         socket_file.flush()
 
@@ -91,15 +95,16 @@ class ProtocolHandler(object):
             buf.write(f'${len(data)}\r\n{data}\r\n')
         elif isinstance(data, int):
             buf.write(f':{data}\r\n' )
+        elif isinstance(data, float):
+            buf.write(f'?{data}\r\n')
         elif isinstance(data, Error):
             buf.write(f'-{Error.message}\r\n' )
         elif isinstance(data, (list, tuple)):
             buf.write(f'*{len(data)}\r\n')
             for item in data:
-                #logger.info(f"Client send {item}")
                 self._write(buf, item)
         elif isinstance(data, dict):
-            buf.write(f'%%{len(data)}\r\n' )
+            buf.write(f'%{len(data)}\r\n' )
             for key in data:
                 self._write(buf, key)
                 self._write(buf, data[key])
@@ -148,13 +153,12 @@ class Server(object):
         while True:
             try:
                 data = self._protocol.handle_request(socket_file)
-                logger.warning(f"In connection_handler() Received {len(data)} . The Data is {data}")
+                logger.info(f"In Server.connection_handler() Server Received {len(data)} . The Data is {data}")
             except Disconnect:
                 logger.info('Client went away: %s:%s' % address)
                 break
 
             try:
-                logger.info("Start get_response()")
                 resp = self.get_response(data)
             except CommandError as exc:
                 logger.exception('Command error')
@@ -166,7 +170,6 @@ class Server(object):
         self._server.serve_forever()
 
     def get_response(self, data):
-        logger.info(f"In Server.get_response, data is {data}")
         if not isinstance(data, list):
             try:
                 data = data.split()
@@ -179,19 +182,15 @@ class Server(object):
         command = data[0].upper()
         if command not in self._commands:
             raise CommandError('Unrecognized command: %s' % command)
-        else:
-            logger.debug('Received command %s', command)
 
         return self._commands[command](*data[1:])
 
     #Below are REDIS commands in server.
     def get(self, key):
-        logger.info(f" in get(), the _kv is {self._kv}. now trying to get {key}")
         return self._kv.get(key)
 
     def set(self, key, value):
         self._kv[key] = value
-        logger.info(f" in set(), the _kv is {self._kv}")
         return 1
 
     def delete(self, key):
@@ -214,16 +213,20 @@ class Server(object):
             self._kv[key] = value
         return len(list(data))
 
-    def lpush(self, key, value):
+    def lpush(self, *items):
+        key = items[0]
         if key not in self._kv:
             self._kv[key] = []
-        self._kv[key].insert(0, value)
+        for value in items[1:]:
+            self._kv[key].insert(0, value)
         return len(self._kv[key])
 
-    def rpush(self, key, value):
+    def rpush(self, *items):
+        key = items[0]
         if key not in self._kv:
             self._kv[key] = []
-        self._kv[key].append(value)
+        for value in items[1:]:
+            self._kv[key].append(value)
         return len(self._kv[key])
 
     def lpop(self, key):
@@ -302,11 +305,11 @@ class Client(object):
     def mset(self, *items):
         return self.execute('MSET', *items)
 
-    def lpush(self, key, value):
-        return self.execute('LPUSH', key, value)
+    def lpush(self, *items):
+        return self.execute('LPUSH', *items)
 
-    def rpush(self, key, value):
-        return self.execute('RPUSH', key, value)
+    def rpush(self, *items):
+        return self.execute('RPUSH', *items)
 
     def lpop(self, key):
         return self.execute('LPOP', key)

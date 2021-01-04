@@ -37,15 +37,19 @@ client.delete('k1')
 client.get('k1')
 client.delete('k1')
 
-#client.set('kx', {'vx': {'vy': 0, 'vz': [1, 2, 3]}})   # failed to process this complicate structure. TODO.
+client.set('kx', {'vx': {'vy': 0, 'vz': [1, 2.34, 3]}})
 
-print(client.get('k1'))
+a = client.get('kx')
+print(client.get('kx'))
+print(f"a['vx']['vz'][1]={a['vx']['vz'][1]}")
 
 # client.flush()
 #
 
-print(client.lpush('list1', 3))
-print(client.lpush('list1', 5))
+print(client.lpop('list1'))
+
+print(client.lpush('list1', 3.3))
+print(client.lpush('list1', 5.634354234, 3, "abc", [3,5,6,7.7]))
 print(client.llen('list1'))
 print(client.rpop('list1'))
 print(client.llen('list1'))
