@@ -3,7 +3,7 @@ from gevent.pool import Pool
 from gevent.server import StreamServer
 
 from collections import namedtuple
-from io import BytesIO
+from io import BytesIO, StringIO
 from socket import error as socket_error
 import logging
 
@@ -20,18 +20,18 @@ Error = namedtuple('Error', ('message',))
 class ProtocolHandler(object):
     def __init__(self):
         self.handlers = {
-            '+': self.handle_simple_string,
-            '-': self.handle_error,
-            ':': self.handle_integer,
-            '$': self.handle_string,
-            '*': self.handle_array,
-            '%': self.handle_dict}
+            b'+': self.handle_simple_string,
+            b'-': self.handle_error,
+            b':': self.handle_integer,
+            b'$': self.handle_string,
+            b'*': self.handle_array,
+            b'%': self.handle_dict}
 
     def handle_request(self, socket_file):
         first_byte = socket_file.read(1)
         if not first_byte:
             raise Disconnect()
-
+        #logging.warning(f"Received: {first_byte}")
         try:
             # Delegate to the appropriate handler based on the first byte.
             return self.handlers[first_byte](socket_file)
@@ -39,24 +39,26 @@ class ProtocolHandler(object):
             raise CommandError('bad request')
 
     def handle_simple_string(self, socket_file):
-        return socket_file.readline().rstrip('\r\n')
+        return socket_file.readline()
 
     def handle_error(self, socket_file):
-        return Error(socket_file.readline().rstrip('\r\n'))
+        return Error(socket_file.readline())
 
     def handle_integer(self, socket_file):
-        return int(socket_file.readline().rstrip('\r\n'))
+        return int(socket_file.readline())
 
     def handle_string(self, socket_file):
         # First read the length ($<length>\r\n).
-        length = int(socket_file.readline().rstrip('\r\n'))
+        length = int(socket_file.readline())
+
         if length == -1:
             return None  # Special-case for NULLs.
         length += 2  # Include the trailing \r\n in count.
-        return socket_file.read(length)[:-2]
+        return socket_file.read(length)[:-2].decode("utf-8")
 
     def handle_array(self, socket_file):
-        num_elements = int(socket_file.readline().rstrip('\r\n'))
+        num_elements = int(socket_file.readline())
+        #logger.warning(f"Received {num_elements} in handle_array")
         return [self.handle_request(socket_file) for _ in range(num_elements)]
     
     def handle_dict(self, socket_file):
@@ -66,28 +68,33 @@ class ProtocolHandler(object):
         return dict(zip(elements[::2], elements[1::2]))
 
     def write_response(self, socket_file, data):
-        buf = BytesIO()
+        buf = StringIO()
         self._write(buf, data)
         buf.seek(0)
-        socket_file.write(buf.getvalue())
+        socket_file.write(buf.getvalue().encode("utf-8"))
         socket_file.flush()
 
+
+    """Write the commands recursively, to a buffer (a BytesIO)."""
     def _write(self, buf, data):
-        if isinstance(data, str):
-            data = data.encode('utf-8')
+        # if isinstance(data, str):
+        #     data = data.encode('utf-8')
 
         if isinstance(data, bytes):
-            buf.write('$%s\r\n%s\r\n' % (len(data), data))
+            buf.write(f'${len(data)}\r\n{data}\r\n')
+        elif isinstance(data, str):
+            buf.write(f'${len(data)}\r\n{data}\r\n')
         elif isinstance(data, int):
-            buf.write(':%s\r\n' % data)
+            buf.write(f':{data}\r\n' )
         elif isinstance(data, Error):
-            buf.write('-%s\r\n' % error.message)
+            buf.write(f'-{Error.message}\r\n' )
         elif isinstance(data, (list, tuple)):
-            buf.write('*%s\r\n' % len(data))
+            buf.write(f'*{len(data)}\r\n')
             for item in data:
+                logger.info(f"Client send {item}")
                 self._write(buf, item)
         elif isinstance(data, dict):
-            buf.write('%%%s\r\n' % len(data))
+            buf.write(f'%%{len(data)}\r\n' )
             for key in data:
                 self._write(buf, key)
                 self._write(buf, data[key])
@@ -128,11 +135,13 @@ class Server(object):
         while True:
             try:
                 data = self._protocol.handle_request(socket_file)
+                logger.warning(f"In connection_handler() Received {len(data)} . The Data is {data}")
             except Disconnect:
                 logger.info('Client went away: %s:%s' % address)
                 break
 
             try:
+                logger.info("Start get_response()")
                 resp = self.get_response(data)
             except CommandError as exc:
                 logger.exception('Command error')
@@ -144,6 +153,7 @@ class Server(object):
         self._server.serve_forever()
 
     def get_response(self, data):
+        logger.info(f"In Server.get_response, data is {data}")
         if not isinstance(data, list):
             try:
                 data = data.split()
@@ -157,15 +167,17 @@ class Server(object):
         if command not in self._commands:
             raise CommandError('Unrecognized command: %s' % command)
         else:
-            logger.debug('Received %s', command)
+            logger.debug('Received command %s', command)
 
         return self._commands[command](*data[1:])
 
     def get(self, key):
+        logger.info(f" in get(), the _kv is {self._kv}. now trying to get {key}")
         return self._kv.get(key)
 
     def set(self, key, value):
         self._kv[key] = value
+        logger.info(f" in set(), the _kv is {self._kv}")
         return 1
 
     def delete(self, key):
@@ -226,4 +238,7 @@ if __name__ == '__main__':
     from gevent import monkey; monkey.patch_all()
     logger.addHandler(logging.StreamHandler())
     logger.setLevel(logging.DEBUG)
-    Server().run()
+    print("Start Server")
+    s = Server()
+    s.run()
+    print("End Server")
