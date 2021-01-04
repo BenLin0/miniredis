@@ -7,6 +7,7 @@ from io import BytesIO, StringIO
 from socket import error as socket_error
 import logging
 
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s [%(levelname)s] %(message)s')
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,9 @@ class ProtocolHandler(object):
         return [self.handle_request(socket_file) for _ in range(num_elements)]
     
     def handle_dict(self, socket_file):
-        num_items = int(socket_file.readline().rstrip('\r\n'))
+        received = socket_file.readline()
+        logger.info(f"handle_dict received {received} . expecting an integer")
+        num_items = int(received)
         elements = [self.handle_request(socket_file)
                     for _ in range(num_items * 2)]
         return dict(zip(elements[::2], elements[1::2]))
@@ -71,7 +74,9 @@ class ProtocolHandler(object):
         buf = StringIO()
         self._write(buf, data)
         buf.seek(0)
-        socket_file.write(buf.getvalue().encode("utf-8"))
+        tosend = buf.getvalue()
+        logger.info(tosend)
+        socket_file.write(tosend.encode("utf-8"))
         socket_file.flush()
 
 
@@ -91,7 +96,7 @@ class ProtocolHandler(object):
         elif isinstance(data, (list, tuple)):
             buf.write(f'*{len(data)}\r\n')
             for item in data:
-                logger.info(f"Client send {item}")
+                #logger.info(f"Client send {item}")
                 self._write(buf, item)
         elif isinstance(data, dict):
             buf.write(f'%%{len(data)}\r\n' )
@@ -124,6 +129,7 @@ class Server(object):
             'DELETE': self.delete,
             'FLUSH': self.flush,
             'MGET': self.mget,
+            'MSET': self.mset,
             'LPUSH': self.lpush,
             'RPUSH': self.rpush,
             'LPOP': self.lpop,
@@ -206,7 +212,7 @@ class Server(object):
         data = zip(items[::2], items[1::2])
         for key, value in data:
             self._kv[key] = value
-        return len(data)
+        return len(list(data))
 
     def lpush(self, key, value):
         if key not in self._kv:
