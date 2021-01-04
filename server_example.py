@@ -124,7 +124,14 @@ class Server(object):
             'DELETE': self.delete,
             'FLUSH': self.flush,
             'MGET': self.mget,
-            'MSET': self.mset}
+            'LPUSH': self.lpush,
+            'RPUSH': self.rpush,
+            'LPOP': self.lpop,
+            'RPOP': self.rpop,
+            'BLPOP': self.blpop,
+            'BRPOP': self.brpop,
+            'LLEN': self.llen
+        }
 
     def connection_handler(self, conn, address):
         logger.info('Connection received: %s:%s' % address)
@@ -171,6 +178,7 @@ class Server(object):
 
         return self._commands[command](*data[1:])
 
+    #Below are REDIS commands in server.
     def get(self, key):
         logger.info(f" in get(), the _kv is {self._kv}. now trying to get {key}")
         return self._kv.get(key)
@@ -200,6 +208,60 @@ class Server(object):
             self._kv[key] = value
         return len(data)
 
+    def lpush(self, key, value):
+        if key not in self._kv:
+            self._kv[key] = []
+        self._kv[key].insert(0, value)
+        return len(self._kv[key])
+
+    def rpush(self, key, value):
+        if key not in self._kv:
+            self._kv[key] = []
+        self._kv[key].append(value)
+        return len(self._kv[key])
+
+    def lpop(self, key):
+        if key not in self._kv:
+            return None
+        try:
+            value = self._kv[key].pop(0)
+        except IndexError:
+            return None
+        return value
+
+    def rpop(self, key):
+        if key not in self._kv:
+            return None
+        try:
+            value = self._kv[key].pop(-1)
+        except IndexError:
+            return None
+        return value
+
+    def llen(self, key):
+        if key not in self._kv:
+            return None
+        return len(self._kv[key])
+
+    def blpop(self, key, timeout=30):
+        value = self.lpop(key)
+        if value:
+            return value
+        #add thread to join. wait for the callback message.
+        #join with a timeout
+        #modify the lpush/rpush functions to take care of the callback.
+
+        raise RuntimeError("TODO")
+
+    def brpop(self, key, timeout=30):
+        value = self.rpop(key)
+        if value:
+            return value
+        # add thread to join. wait for the callback message.
+        # join with a timeout
+        # modify the lpush/rpush functions to take care of the callback.
+        raise RuntimeError("TODO")
+
 
 class Client(object):
     def __init__(self, host='127.0.0.1', port=31337):
@@ -215,6 +277,7 @@ class Client(object):
             raise CommandError(resp.message)
         return resp
 
+    # Below are REDIS commands in client.
     def get(self, key):
         return self.execute('GET', key)
 
@@ -232,6 +295,28 @@ class Client(object):
 
     def mset(self, *items):
         return self.execute('MSET', *items)
+
+    def lpush(self, key, value):
+        return self.execute('LPUSH', key, value)
+
+    def rpush(self, key, value):
+        return self.execute('RPUSH', key, value)
+
+    def lpop(self, key):
+        return self.execute('LPOP', key)
+
+    def rpop(self, key):
+        return self.execute('RPOP', key)
+
+    def llen(self, key):
+        return self.execute('LLEN', key)
+
+    def blpop(self, key):
+        return self.execute('BLPOP', key)
+
+    def brpop(self, key):
+        return self.execute('BRPOP', key)
+
 
 
 if __name__ == '__main__':
