@@ -1,0 +1,2 @@
+# miniredis
+redis server
