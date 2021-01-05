@@ -7,10 +7,6 @@ from io import BytesIO, StringIO
 from socket import error as socket_error
 import logging
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s [%(levelname)s] %(message)s')
-
-logger = logging.getLogger(__name__)
-
 
 class CommandError(Exception): pass
 class Disconnect(Exception): pass
@@ -63,7 +59,7 @@ class ProtocolHandler(object):
 
     def handle_array(self, socket_file):
         num_elements = int(socket_file.readline())
-        #logger.warning(f"Received {num_elements} in handle_array")
+        #logging.warning(f"Received {num_elements} in handle_array")
         return [self.handle_request(socket_file) for _ in range(num_elements)]
     
     def handle_dict(self, socket_file):
@@ -79,7 +75,7 @@ class ProtocolHandler(object):
         self._write(buf, data)
         buf.seek(0)
         tosend = buf.getvalue()
-        logger.debug(tosend)
+        logging.debug(tosend)
         socket_file.write(tosend.encode("utf-8"))
         socket_file.flush()
 
@@ -127,6 +123,11 @@ class Server(object):
 
         self._commands = self.get_commands()
 
+    def help(self):
+        output = f"Running in {self._server.address}\r\n"
+        output += "Available commands:" + ",".join([f"[{command}]" for command in self.get_commands()])
+        return output
+
     def get_commands(self):
         return {
             'GET': self.get,
@@ -145,7 +146,7 @@ class Server(object):
         }
 
     def connection_handler(self, conn, address):
-        logger.info('Connection received: %s:%s' % address)
+        logging.info('Connection received: %s:%s' % address)
         # Convert "conn" (a socket object) into a file-like object.
         socket_file = conn.makefile('rwb')
 
@@ -153,15 +154,15 @@ class Server(object):
         while True:
             try:
                 data = self._protocol.handle_request(socket_file)
-                logger.info(f"In Server.connection_handler() Server Received {len(data)} . The Data is {data}")
+                logging.info(f"In Server.connection_handler() Server Received {len(data)} . The Data is {data}")
             except Disconnect:
-                logger.info('Client went away: %s:%s' % address)
+                logging.info('Client went away: %s:%s' % address)
                 break
 
             try:
                 resp = self.get_response(data)
             except CommandError as exc:
-                logger.exception('Command error')
+                logging.exception('Command error')
                 resp = Error(exc.args[0])
 
             self._protocol.write_response(socket_file, resp)
@@ -327,12 +328,3 @@ class Client(object):
         return self.execute('BRPOP', key)
 
 
-
-if __name__ == '__main__':
-    from gevent import monkey; monkey.patch_all()
-    logger.addHandler(logging.StreamHandler())
-    logger.setLevel(logging.DEBUG)
-    print("Start Server")
-    s = Server()
-    s.run()
-    print("End Server")
