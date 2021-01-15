@@ -139,9 +139,10 @@ class Server(object):
         self._queue = {}    # for callback.
 
         self._commands = self.get_commands()
+        self.info = f"Server open in {host}:{port}"
 
     def help(self):
-        output = f"Running in {self._server.address}\r\n"
+        output = f"{self.info}\r\n"
         output += "Available commands:" + ",".join([f"[{command}]" for command in self.get_commands()])
         return output
 
@@ -163,7 +164,7 @@ class Server(object):
         }
 
     def connection_handler(self, conn, address):
-        logging.info('Connection received: %s:%s' % address)
+        logging.info('Connection received from: %s:%s' % address)
         # Convert "conn" (a socket object) into a file-like object.
         socket_file = conn.makefile('rwb')
 
@@ -247,6 +248,9 @@ class Server(object):
         key = items[0]
         if key not in self._kv:
             self._kv[key] = []
+        if not isinstance(self._kv[key], list):
+            logging.warning(f"Element {key} is not a list")
+            return None
         for value in items[1:]:
             self._kv[key].insert(0, value)
 
@@ -257,13 +261,20 @@ class Server(object):
         key = items[0]
         if key not in self._kv:
             self._kv[key] = []
+        if not isinstance(self._kv[key], list):
+            logging.warning(f"Element {key} is not a list")
+            return None
         for value in items[1:]:
             self._kv[key].append(value)
+
         self.releaseblock(key)
         return len(self._kv[key])
 
     def lpop(self, key):
         if key not in self._kv:
+            return None
+        if not isinstance(self._kv[key], list):
+            logging.warning(f"Element {key} is not a list")
             return None
         try:
             value = self._kv[key].pop(0)
@@ -273,6 +284,9 @@ class Server(object):
 
     def rpop(self, key):
         if key not in self._kv:
+            return None
+        if not isinstance(self._kv[key], list):
+            logging.warning(f"Element {key} is not a list")
             return None
         try:
             value = self._kv[key].pop(-1)
@@ -286,6 +300,9 @@ class Server(object):
         return len(self._kv[key])
 
     def blpop(self, key, timeout=300):
+        if key not in self._kv:
+            self._kv[key] = []  #  even if this key doesn't exist, block pop still wait for this list.
+
         value = self.lpop(key)
         if value:
             return value
@@ -310,6 +327,9 @@ class Server(object):
                 return None
 
     def brpop(self, key, timeout=30):
+        if key not in self._kv:
+            self._kv[key] = []
+
         value = self.rpop(key)
         if value:
             return value
@@ -326,6 +346,7 @@ class Client(object):
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.connect((host, port))
         self._fh = self._socket.makefile('rwb')
+        self.info = f"Connected to {host}:{port}"
 
     def execute(self, *args):
         self._protocol.write_response(self._fh, args)
