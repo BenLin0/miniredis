@@ -4,3 +4,5 @@ Started from forking https://gist.github.com/coleifer/dbbedc287605dcc22990a6e549
 
 Will add a queue mechanism into this mini redis server.
 
+Also add MULTI/EXEC for transaction (atomic execution)
+

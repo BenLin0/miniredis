@@ -1,3 +1,5 @@
+from threading import Thread
+
 from gevent import socket
 from gevent.pool import Pool
 from gevent.server import StreamServer
@@ -6,12 +8,26 @@ from collections import namedtuple
 from io import BytesIO, StringIO
 from socket import error as socket_error
 import logging
+import time
+
+
 
 
 class CommandError(Exception): pass
 class Disconnect(Exception): pass
 
 Error = namedtuple('Error', ('message',))
+
+class IdleThread(Thread):
+    def __init__(self, timeout=0):  # timeout: seconds.
+        Thread.__init__(self)
+        self.timeout = timeout
+
+    def run(self):
+        time.sleep(self.timeout)
+
+    def stop(self):
+        self._stop()
 
 
 class ProtocolHandler(object):
@@ -120,6 +136,7 @@ class Server(object):
 
         self._protocol = ProtocolHandler()
         self._kv = {}
+        self._queue = {}    # for callback.
 
         self._commands = self.get_commands()
 
@@ -180,7 +197,7 @@ class Server(object):
         if not data:
             raise CommandError('Missing command')
 
-        command = data[0].upper()
+        command = data[0]
         if command not in self._commands:
             raise CommandError('Unrecognized command: %s' % command)
 
@@ -192,6 +209,9 @@ class Server(object):
 
     def set(self, key, value):
         self._kv[key] = value
+        if key in self._queue:
+            callback = self._queue.pop(0)
+            callback()
         return 1
 
     def delete(self, key):
@@ -214,12 +234,23 @@ class Server(object):
             self._kv[key] = value
         return len(list(data))
 
+    def releaseblock(self, key):
+        if key in self._queue:
+            releaseblockwait = self._queue[key].pop()
+            while releaseblockwait:
+                if releaseblockwait.is_alive():
+                    releaseblockwait.stop()
+                else:   # this thread is already timeout. no one is waiting for it. ignore. pop the next.
+                    releaseblockwait = self._queue.pop()
+
     def lpush(self, *items):
         key = items[0]
         if key not in self._kv:
             self._kv[key] = []
         for value in items[1:]:
             self._kv[key].insert(0, value)
+
+        self.releaseblock(key)
         return len(self._kv[key])
 
     def rpush(self, *items):
@@ -228,6 +259,7 @@ class Server(object):
             self._kv[key] = []
         for value in items[1:]:
             self._kv[key].append(value)
+        self.releaseblock(key)
         return len(self._kv[key])
 
     def lpop(self, key):
@@ -253,15 +285,29 @@ class Server(object):
             return None
         return len(self._kv[key])
 
-    def blpop(self, key, timeout=30):
+    def blpop(self, key, timeout=300):
         value = self.lpop(key)
         if value:
             return value
         #add thread to join. wait for the callback message.
         #join with a timeout
         #modify the lpush/rpush functions to take care of the callback.
-
-        raise RuntimeError("TODO")
+        waittogetvalue = IdleThread(timeout)
+        if key not in self._queue:
+            self._queue[key] = []
+        self._queue[key].append(waittogetvalue)
+        waittogetvalue.start()
+        waittogetvalue.join(timeout)
+        if waittogetvalue.is_alive():   #the thread is still alive, the key is not set, but we are time-out
+            # waittogetvalue.stop()    # not exactly need to execute this, because we already wait enough time.
+            return None
+        else:
+            value = self.lpop(key)
+            if value:
+                return value
+            else:
+                logging.error("blpop(). The logic here should be able to retrieve a value. might need an atomic execution around here.")
+                return None
 
     def brpop(self, key, timeout=30):
         value = self.rpop(key)
@@ -270,6 +316,7 @@ class Server(object):
         # add thread to join. wait for the callback message.
         # join with a timeout
         # modify the lpush/rpush functions to take care of the callback.
+
         raise RuntimeError("TODO")
 
 
