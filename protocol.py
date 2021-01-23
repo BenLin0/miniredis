@@ -229,7 +229,10 @@ class Server(object):
             while releaseblockevent:
                 if releaseblockevent.is_set():
                        # this event is already timeout. no one is waiting for it. ignore. pop the next.
-                    releaseblockevent = self._queue.pop()
+                    if self._queue[key]:
+                        releaseblockevent = self._queue[key].pop()
+                    else:   # the _queue[key] is empty, then ignore.
+                        break
                 else:
                     releaseblockevent.set()
                     break

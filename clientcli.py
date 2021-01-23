@@ -3,13 +3,11 @@ Test the server
 """
 
 import sys, logging
-
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
-
-
-sys.path.append('../')
 from protocol import Client, CommandError
+
+
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s [%(levelname)s] %(message)s')
+
 client = Client()
 print("Start miniredis client.")
 print(client.info)
