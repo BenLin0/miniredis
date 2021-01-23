@@ -13,8 +13,10 @@ from protocol import Client, CommandError
 client = Client()
 print("Start miniredis client.")
 print(client.info)
-print("Available commands:[GET],[SET],[DELETE],[FLUSH],[MGET],[MSET],[LPUSH],[RPUSH],[LPOP],[RPOP],[BLPOP],[BRPOP],[LLEN],[MULTI],[EXEC],[QUIT],[EXIT]")
-client.set('k0', 'v0')      # for debugging.
+print("""Available commands:[GET],[SET],[DELETE],[FLUSH],[MGET],[MSET],[LPUSH],[RPUSH],[LPOP],[RPOP],[BLPOP],[BRPOP],[LLEN]
+([MULTI],[EXEC] to be complete)
+[QUIT],[EXIT]""")
+
 while True:
     command = input(">")
     segments = command.split(" ")
