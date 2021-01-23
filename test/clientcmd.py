@@ -13,12 +13,13 @@ from protocol import Client, CommandError
 client = Client()
 print("Start miniredis client.")
 print(client.info)
-print("Available commands:[GET],[SET],[DELETE],[FLUSH],[MGET],[MSET],[LPUSH],[RPUSH],[LPOP],[RPOP],[BLPOP],[BRPOP],[LLEN],[MULTI],[EXEC],[QUIT]")
-client.set('k0', 'v0')
+print("Available commands:[GET],[SET],[DELETE],[FLUSH],[MGET],[MSET],[LPUSH],[RPUSH],[LPOP],[RPOP],[BLPOP],[BRPOP],[LLEN],[MULTI],[EXEC],[QUIT],[EXIT]")
+client.set('k0', 'v0')      # for debugging.
 while True:
     command = input(">")
     segments = command.split(" ")
-    if segments[0] == "QUIT":
+    segments[0] = segments[0].upper()
+    if segments[0] == "QUIT" or segments[0] == "EXIT":
         break
     arguments = tuple(segments)
     try:
