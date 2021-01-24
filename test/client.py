@@ -61,7 +61,7 @@ print(client.lpush('newlist', 77))
 logging.info("Done")
 
 # testing bytes
-randomfile = os.urandom(10)
+randomfile = os.urandom(10*1024*1024)
 pfile = pickle.dumps(randomfile)
 logging.info(f"About to write a big data, filesize={sys.getsizeof(randomfile)}, pickled size={sys.getsizeof(pfile)}")
 client.set("file", pfile)
@@ -79,5 +79,18 @@ with open("a_copy.mp3", mode='wb') as file: # b is important -> binary
     file.write(copymp3)
 logging.info("done writing the file.")
 
-
 # Localhost: 20 minisecond to write 3M, 180 miniseconds to SET 5M, 30 miniseconds to GET 5M, 300 minisecond to write 10M;
+
+with open("a.pdf", mode='rb') as file: # b is important -> binary
+    fileContent = file.read()
+    pfile = pickle.dumps(fileContent)
+    logging.info(f"size of file={sys.getsizeof(fileContent)}, pickled size={sys.getsizeof(pfile)}")
+    client.set("pdf", pfile)
+
+logging.info("finished writting. start reading.")
+pcopymp3 = client.get("pdf")
+copymp3 = pickle.loads(pcopymp3)
+logging.info(f"get copy of pdf size={sys.getsizeof(copymp3)}, unpickled from size of {sys.getsizeof(pcopymp3)}")
+with open("a_copy.pdf", mode='wb') as file: # b is important -> binary
+    file.write(copymp3)
+logging.info("done writing the file from pickled format..")
