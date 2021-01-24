@@ -23,7 +23,14 @@ while True:
         break
     arguments = tuple(segments)
     try:
-        print(client.execute(*arguments))
+        received = client.execute(*arguments)
+        if isinstance(received, bytes):
+            filename = "_".join(segments)+".bin"
+            with open(filename, mode='wb') as file:  # b is important -> binary
+                file.write(received)
+            print(f"{sys.getsizeof(received)} bytes saved as :{filename}")
+        else:
+            print()
     except CommandError as e:
         print("Wrong error format. Please consult the manual.")
     except Exception as e:
