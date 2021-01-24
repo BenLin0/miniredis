@@ -1,4 +1,4 @@
-import threading
+import threading, time
 
 from gevent import socket
 from gevent.pool import Pool
@@ -129,9 +129,12 @@ class Server(object):
         self._protocol = ProtocolHandler()
         self._kv = {}
         self._queue = {}    # for callback.
+        self._ttl = {}
 
         self._commands = self.get_commands()
         self.info = f"Server open in {host}:{port}"
+        th = threading.Thread(target=self._checkttl)
+        th.start()
 
     def help(self):
         output = f"{self.info}\r\n"
@@ -152,7 +155,10 @@ class Server(object):
             'RPOP': self.rpop,
             'BLPOP': self.blpop,
             'BRPOP': self.brpop,
-            'LLEN': self.llen
+            'LLEN': self.llen,
+            'EXPIRE': self.expire,
+            'TTL': self.ttl,
+            'PERSIST': self.persist
         }
 
     def connection_handler(self, conn, address):
@@ -174,6 +180,10 @@ class Server(object):
             except CommandError as exc:
                 logging.exception('Command error')
                 resp = Error(exc.args[0])
+            except TypeError as err:
+                resp = Error(f"Wrong format. {err}")
+            except Exception:
+                resp = Error(f"Unknown error. {err}")
 
             self._protocol.write_response(socket_file, resp)
 
@@ -345,6 +355,34 @@ class Server(object):
         else:
             waittogetvalue.set()    # set it to abandon it, so the releaseblock() function will move on to next block in _queue
             return None
+
+    def _checkttl(self):    #
+        while(True):
+            todelete = []
+            for key in self._ttl:
+                self._ttl[key] -= 1
+                if self._ttl[key] < 0:
+                    todelete.append(key)
+
+            for key in todelete:
+                del self._ttl[key]
+                del self._kv[key]
+
+            time.sleep(60)
+
+    def expire(self, key, timeout):
+        self._ttl[key] = int(timeout)
+        return timeout
+
+    def persist(self, key):
+        if key in self._ttl:
+            del self._ttl[key]
+        return None
+
+    def ttl(self, key):
+        if key not in self._ttl:
+            return -1
+        return self._ttl[key]
 
 
 class Client(object):

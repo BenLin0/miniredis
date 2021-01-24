@@ -12,6 +12,7 @@ client = Client()
 print("Start miniredis client.")
 print(client.info)
 print("""Available commands:[GET],[SET],[DELETE],[FLUSH],[MGET],[MSET],[LPUSH],[RPUSH],[LPOP],[RPOP],[BLPOP],[BRPOP],[LLEN]
+[EXPIRE],[TTL],[PERSIST]
 ([MULTI],[EXEC] to be complete)
 [QUIT],[EXIT]""")
 
@@ -30,7 +31,7 @@ while True:
                 file.write(received)
             print(f"{sys.getsizeof(received)} bytes saved as :{filename}")
         else:
-            print()
+            print(received)
     except CommandError as e:
         print("Wrong error format. Please consult the manual.")
     except Exception as e:
