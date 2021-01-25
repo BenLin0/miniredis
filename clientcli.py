@@ -14,7 +14,7 @@ print(client.info)
 print("""Available commands:[GET],[SET],[DELETE],[FLUSH],[MGET],[MSET],[LPUSH],[RPUSH],[LPOP],[RPOP],[BLPOP],[BRPOP],[LLEN]
 [EXPIRE],[TTL],[PERSIST]
 ([MULTI],[EXEC] to be complete)
-[QUIT],[EXIT]""")
+[INFO],[QUIT],[EXIT]""")
 
 while True:
     command = input(">")

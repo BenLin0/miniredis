@@ -1,4 +1,4 @@
-import threading, time
+import threading, time, sys
 
 from gevent import socket
 from gevent.pool import Pool
@@ -158,7 +158,8 @@ class Server(object):
             'LLEN': self.llen,
             'EXPIRE': self.expire,
             'TTL': self.ttl,
-            'PERSIST': self.persist
+            'PERSIST': self.persist,
+            'INFO': self.info
         }
 
     def connection_handler(self, conn, address):
@@ -212,6 +213,7 @@ class Server(object):
 
     def set(self, key, value):
         self._kv[key] = value
+        #print(f"SET: {key}, {type(self._kv[key])}, {sys.getsizeof(self._kv[key])} value={value}\n")
         if key in self._queue:
             callback = self._queue.pop(0)
             callback()
@@ -383,6 +385,12 @@ class Server(object):
         if key not in self._ttl:
             return -1
         return self._ttl[key]
+
+    def info(self):
+        result = "key, type, size\n"
+        for k in sorted(self._kv):
+            result += f"{k}, {type(self._kv[k])}, {sys.getsizeof(self._kv[k])}\n"
+        return result
 
 
 class Client(object):

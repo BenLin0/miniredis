@@ -19,8 +19,8 @@ logging.info("End get")
 print(f"expecting: v0 recieved:{x}")
 
 client.set('k2', -0.345)
-x = client.get('k2')
-print(f"expecting: -0.345 recieved:{x}")
+x = client.get('k2')-1
+print(f"expecting: -1.345 recieved:{x}")
 
 x = client.get('k1')
 print(f"expecting: None recieved:{x}")
@@ -42,7 +42,7 @@ a = client.get('kx')
 print(client.get('kx'))
 print(f"expecting: 2.34 received: a['vx']['vz'][1]={a['vx']['vz'][1]}")
 
-client.flush()
+#client.flush()
 #
 
 #print(client.blpop('list1'))
@@ -94,3 +94,6 @@ logging.info(f"get copy of pdf size={sys.getsizeof(copymp3)}, unpickled from siz
 with open("a_copy.pdf", mode='wb') as file: # b is important -> binary
     file.write(copymp3)
 logging.info("done writing the file from pickled format..")
+
+client.set("c", 8.9)
+print(client.execute("INFO"))
