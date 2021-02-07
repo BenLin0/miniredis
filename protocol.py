@@ -5,8 +5,7 @@ from gevent.pool import Pool
 from gevent.server import StreamServer
 
 from collections import namedtuple
-from io import BytesIO, StringIO
-from socket import error as socket_error
+from io import BytesIO
 import logging
 
 
@@ -183,7 +182,7 @@ class Server(object):
                 resp = Error(exc.args[0])
             except TypeError as err:
                 resp = Error(f"Wrong format. {err}")
-            except Exception:
+            except Exception as err:
                 resp = Error(f"Unknown error. {err}")
 
             self._protocol.write_response(socket_file, resp)
@@ -394,16 +393,27 @@ class Server(object):
 
 
 class Client(object):
-    def __init__(self, host='127.0.0.1', port=31337):
+    def __init__(self, host='127.0.0.1', port=31337, poolnum=2):
         self._protocol = ProtocolHandler()
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._socket.connect((host, port))
-        self._fh = self._socket.makefile('rwb')
+        self.lock = threading.RLock()
+        self._fh = []
+        for i in range(poolnum):
+            _socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            _socket.connect((host, port))
+            self._fh.append(_socket.makefile('rwb'))
         self.info = f"Connected to {host}:{port}"
 
+    def close(self):
+        pass
+        # self._socket.close()
+
     def execute(self, *args):
-        self._protocol.write_response(self._fh, args)
-        resp = self._protocol.handle_request(self._fh)
+        self.lock.acquire()
+        try:
+            self._protocol.write_response(self._fh[0], args)
+            resp = self._protocol.handle_request(self._fh[0])
+        finally:
+            self.lock.release()
         if isinstance(resp, Error):
             raise CommandError(resp.message)
         return resp

@@ -36,10 +36,19 @@ if __name__ == "__main__":
 
     logging.info("Start")
     starttime = time.time()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
-        f = [executor.submit(globalclient.set, "foo", "bar") for i in range(int(args.n))]
-        concurrent.futures.wait(f)
 
+
+    logging.info("Start parallel threadpool executor:")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        f = [executor.submit(globalclient.set, f"foo{i}", "bar") for i in range(int(args.n))]
+        executor.shutdown(wait=True)
+
+    # logging.info("Start the old way in serial:")
+    # for i in range(int(args.n)):
+    #     globalclient.set("foo", "bar")      #2.3 for 10,000 set request.
+
+
+    globalclient.close()
     endtime = time.time()
     logging.info("Done!")
     print(f"""======SET====
