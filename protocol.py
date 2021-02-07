@@ -129,6 +129,7 @@ class Server(object):
         self._kv = {}
         self._queue = {}    # for callback.
         self._ttl = {}
+        self._listlength = {}   # for SETLENGTH
 
         self._commands = self.get_commands()
         self.info = f"Server open in {host}:{port}"
@@ -158,7 +159,10 @@ class Server(object):
             'EXPIRE': self.expire,
             'TTL': self.ttl,
             'PERSIST': self.persist,
-            'INFO': self.info
+            'FLUSHALL': self.flushall,
+            'INFO': self.info,
+            'BGET': self.bget,
+            'SETLENGTH': self.setlength
         }
 
     def connection_handler(self, conn, address):
@@ -213,9 +217,8 @@ class Server(object):
     def set(self, key, value):
         self._kv[key] = value
         #print(f"SET: {key}, {type(self._kv[key])}, {sys.getsizeof(self._kv[key])} value={value}\n")
-        if key in self._queue:
-            callback = self._queue.pop(0)
-            callback()
+
+        self.releaseblock(key)
         return 1
 
     def delete(self, key):
@@ -236,6 +239,7 @@ class Server(object):
         data = zip(items[::2], items[1::2])
         for key, value in data:
             self._kv[key] = value
+            self.releaseblock(key)
         return len(list(data))
 
     def releaseblock(self, key):
@@ -262,6 +266,10 @@ class Server(object):
         for value in items[1:]:
             self._kv[key].insert(0, value)
 
+        if key in self._listlength:
+            while len(self._kv[key]) > self._listlength[key]:
+                self._kv[key].pop(-1)
+
         self.releaseblock(key)
         return len(self._kv[key])
 
@@ -274,6 +282,10 @@ class Server(object):
             return None
         for value in items[1:]:
             self._kv[key].append(value)
+
+        if key in self._listlength:
+            while len(self._kv[key]) > self._listlength[key]:
+                self._kv[key].pop()
 
         self.releaseblock(key)
         return len(self._kv[key])
@@ -391,6 +403,44 @@ class Server(object):
             result += f"{k}, {type(self._kv[k])}, {sys.getsizeof(self._kv[k])}\n"
         return result
 
+    def flushall(self):
+        self._kv = {}
+        self._queue = {}    # for callback.
+        self._ttl = {}
+        self._listlength = {}
+        return None
+
+    def setlength(self, key, length):
+        length = int(length)
+        if length == 0:
+            if key in self._listlength:
+                del self._listlength[key]
+            return
+        self._listlength[key] = length
+
+    def bget(self, key, timeout=30):
+        if key in self._kv:
+            return self._kv[key]
+
+        waittogetvalue = threading.Event()
+        if key not in self._queue:
+            self._queue[key] = []
+        self._queue[key].append(waittogetvalue)
+
+        i = waittogetvalue.wait(timeout)
+        if waittogetvalue.is_set():
+            value = self._kv[key]
+            if value:
+                del self._kv[key]
+                return value
+            else:
+                logging.error(
+                    "brpop(). The logic here should be able to retrieve a value. might need an atomic execution around here.")
+                return None
+        else:
+            waittogetvalue.set()  # set it to abandon it, so the releaseblock() function will move on to next block in _queue
+            return None
+
 
 class Client(object):
     def __init__(self, host='127.0.0.1', port=31337, poolnum=2):
@@ -458,4 +508,11 @@ class Client(object):
     def brpop(self, key):
         return self.execute('BRPOP', key)
 
+    def bget(self, key):
+        return self.execute('BGET', key)
 
+    def setlength(self, key, length):
+        return self.execute('SETLENGTH', key, length)
+
+    def flushall(self):
+        return self.execute('FLUSHALL')
